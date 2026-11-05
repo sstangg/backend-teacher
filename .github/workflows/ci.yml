@@ -1,0 +1,55 @@
+name: CI
+
+# The job names below are required status checks on main. Renaming a job means
+# updating branch protection, or PRs will wait forever on the old name. Avoid
+# path filters here too: a required check that gets skipped never reports.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  rust-tests:
+    name: Rust tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run tests
+        working-directory: simulation
+        run: cargo test
+
+  client-build:
+    name: Client build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+
+      - name: Add WASM target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: npm ci
+
+      - name: Build WASM
+        working-directory: simulation
+        run: npx wasm-pack build --target web --out-dir pkg
+
+      # The client depends on simulation/pkg, so install it after the WASM build.
+      - name: Install client dependencies
+        run: npm ci --prefix client
+
+      - name: Type-check and build client
+        run: npm run build --prefix client
